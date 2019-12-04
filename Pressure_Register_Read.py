@@ -302,6 +302,11 @@ def temp_register_read(register,count):
         plt.pause(1e-17)
         time.sleep(0.1)
         
+# Add some i2c write function 
+
+def single_register_write():
+    print("")
+        
 # Event Handler
 def signal_handler(sig, frame):
     print('You pressed Ctrl+C')
