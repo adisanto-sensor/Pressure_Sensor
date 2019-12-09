@@ -1,3 +1,6 @@
+' ******Rev History*****'
+'I2C_Write not working yet Date 12/9/2019'
+
 import time
 import sys
 import signal
@@ -97,7 +100,7 @@ def mainMenu():
         print("\t MAIN MENU")
         print("\t Ctrl+C to Exit Selection")
         print("\t*****************************")
-        print("\t 0. Test Board Communication")
+        print("\t 0. Test Board Communication / Blink LED on UNO board")
         print("\t 1. Read IC Version and Sensor Configuration")
         print("\t 2. Dump DSP Registers")
         print("\t 3. Dump Main Registers")
@@ -105,7 +108,7 @@ def mainMenu():
         print("\t 5. Read Corrected Temperature")
         print("\t 6. Dump Results Registers")
         print("\t 7. Read Single Register")
-        print("\t 8. Quit")
+        print("\t 8. Quit/Test Function")
         print("\n")
         selection=(input("Enter Choice:" ))
         
@@ -115,6 +118,7 @@ def mainMenu():
             
         elif selection == '0':
                 count=int(input("Enter number of times:"))
+                print("LED 13 will blink on the Uno board")
                 blink(count)
 
         elif selection == '1':
@@ -149,15 +153,21 @@ def mainMenu():
                 single_register_read(register,count,Main_Registers)
 
         elif selection == '8':
-                 board.reset()
-                 sys.exit(0)
+                board.reset()
+                sys.exit(0)
+                 #i2c_write()
 
         else:
                 print("Enter a valid selection number:")
                 mainMenu()
 
-# Read sensor hw version via I2C interface
+# Working.... I2C
+
+def i2c_write():
+    print("Write to register")
+    a = board.i2c_write(0x6c,0x6a, 0x12, 0x34)
     
+# Read Sensor hw version via I2C interface
 def read_HW_Version():
     board.i2c_read(sensor_i2c_addr, sensor_hw_version_reg, 2, board.I2C_READ)
     time.sleep(1)
@@ -301,11 +311,6 @@ def temp_register_read(register,count):
         plt.draw()
         plt.pause(1e-17)
         time.sleep(0.1)
-        
-# Add some i2c write function 
-
-def single_register_write():
-    print("")
         
 # Event Handler
 def signal_handler(sig, frame):
