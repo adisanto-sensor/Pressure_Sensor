@@ -1,5 +1,5 @@
 ' ******Rev History*****'
-'I2C_Write not working yet Date 12/9/2019'
+'I2C_Write working using sleep command Date 12/18/2019'
 
 import time
 import sys
@@ -153,9 +153,9 @@ def mainMenu():
                 single_register_read(register,count,Main_Registers)
 
         elif selection == '8':
-                board.reset()
-                sys.exit(0)
-                 #i2c_write()
+                #board.reset()
+                #sys.exit(0)
+                i2c_write()
 
         else:
                 print("Enter a valid selection number:")
@@ -164,9 +164,9 @@ def mainMenu():
 # Working.... I2C
 
 def i2c_write():
-    print("Write to register")
-    a = board.i2c_write(0x6c,0x6a, 0x12, 0x34)
-    
+    # (device addr, register addr, lowbyte, highbyte)
+    board.i2c_write(0x6c,0x22,0x32,0x6C)
+
 # Read Sensor hw version via I2C interface
 def read_HW_Version():
     board.i2c_read(sensor_i2c_addr, sensor_hw_version_reg, 2, board.I2C_READ)
@@ -233,7 +233,8 @@ def blink(count):
 
 # Read Pressure Register
 def pressure_register_read(register,count):
-    # Plot stuff 
+    # Plot stuff
+    p_delta = 0
     ydata = []
     xdata = []
     #plt.show()
@@ -273,7 +274,12 @@ def pressure_register_read(register,count):
         line.set_ydata(ydata)
         plt.draw()
         plt.pause(1e-17)
-        time.sleep(0.1)
+        # Tony
+        time.sleep(.1)
+        p_delta += p_read
+        # if (p_delta > 10000):
+        #    i2c_write()
+        
    
 # Read Temp Register
 def temp_register_read(register,count):
@@ -335,8 +341,8 @@ print("Blinking LED on pin 13 for 10 times ...")
 board.i2c_config(0, board.ANALOG, 4, 5)
  
 # call main menu
-mainMenu()
 
+mainMenu()
 
 # Close PyMata when we are done
 board.close()
