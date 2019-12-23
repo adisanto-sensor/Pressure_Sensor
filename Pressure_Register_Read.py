@@ -1,5 +1,6 @@
 ' ******Rev History*****'
 'I2C_Write working using sleep command Date 12/18/2019'
+'added simple test to unlock and read nvm area.  12/23/2019'
 
 import time
 import sys
@@ -7,6 +8,7 @@ import signal
 import matplotlib.pyplot as plt
 import numpy
 from PyMata.pymata import PyMata
+from threading import Thread
 
 # Digital pin 13 is connected to an LED. If you are running this script with
 # an Arduino UNO no LED is needed (Pin 13 is connected to an internal LED).
@@ -164,8 +166,31 @@ def mainMenu():
 # Working.... I2C
 
 def i2c_write():
+    data = 0
     # (device addr, register addr, lowbyte, highbyte)
-    board.i2c_write(0x6c,0x22,0x32,0x6C)
+    # slep test 
+    # board.i2c_write(0x6c,0x22,0x32,0x6C)
+    # Write CM_CMD registe(i2c_addr,CM_CMD_Register, cm_address + Readcmd 4c)
+    # maybe this area is write protected see section 6.5
+    # write cookie seq 0xf75A, 0x0cc7, 0xd21e) to unlock
+    # 0x22 is the cmd register address
+    board.i2c_write(0x6c, 0x22, 0x5A, 0xF7)
+    board.i2c_write(0x6c, 0x22, 0xc7, 0x0c)
+    board.i2c_write(0x6c, 0x22, 0x1e, 0xd2)
+    # write to configuration area access 
+    board.i2c_write(0x6c, 0x4e, 0x20, 0x4C)  
+    time.sleep(1)   
+    # cmd read register location = 0x48
+    board.i2c_read(0x6C, 0x48, 2, board.I2C_READ)
+    # need sleep for some reason on NVM read, maybe timing to memory
+    time.sleep(1)
+    data = board.i2c_get_read_data(0x6C)
+    value0 = data[0]
+    value1 = data[1]
+    value2 = data[2]
+    word = data[2] << 8 | data[1]
+    print("Read Command Area --->" , hex(word))
+    
 
 # Read Sensor hw version via I2C interface
 def read_HW_Version():
@@ -255,11 +280,11 @@ def pressure_register_read(register,count):
         # data[1] = byte 3 of pressure data
         # shift both bytes into a word (i.e) 0x[E5][68]
         pressure_counts = data[2] << 8 | data[1]
-        print("Pressure Counts", pressure_counts)
+        # print("Pressure Counts", pressure_counts)
         b = pressure_counts
         if  b >= 1 << 15:
             b -= 1 << 16
-        print("Pressure 2's Complement", (b))
+        # print("Pressure 2's Complement", (b))
         P_DOUT_max = 26214
         P_DOUT_min = -26214
         PMax = 1260 
@@ -267,7 +292,7 @@ def pressure_register_read(register,count):
         P0 = 760
         Delta_P_DOUT = 52428
         p_read = PMin + ((b - P_DOUT_min) / (Delta_P_DOUT )) *(PMax - PMin)
-        print("Pressure in mmHg            ", p_read)
+        # print("Pressure in mmHg            ", p_read)
         xdata.append(x)
         ydata.append(p_read)
         line.set_xdata(xdata)
@@ -276,7 +301,7 @@ def pressure_register_read(register,count):
         plt.pause(1e-17)
         # Tony
         time.sleep(.1)
-        p_delta += p_read
+        # p_delta += p_read
         # if (p_delta > 10000):
         #    i2c_write()
         
