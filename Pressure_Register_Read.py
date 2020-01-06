@@ -104,13 +104,14 @@ def mainMenu():
         print("\t*****************************")
         print("\t 0. Test Board Communication / Blink LED on UNO board")
         print("\t 1. Read IC Version and Sensor Configuration")
-        print("\t 2. Dump DSP Registers")
-        print("\t 3. Dump Main Registers")
+        print("\t 2. Read Sensor DSP Registers")
+        print("\t 3. Read Sensor Main Registers")
         print("\t 4. Read Corrected Pressure")
         print("\t 5. Read Corrected Temperature")
-        print("\t 6. Dump Results Registers")
+        print("\t 6. Read Sensor Results Registers")
         print("\t 7. Read Single Register")
-        print("\t 8. Quit/Test Function")
+        print("\t 8. Unlock and Write Register **Caution*")
+        print("\t 9. Quit/Test Function")
         print("\n")
         selection=(input("Enter Choice:" ))
         
@@ -155,29 +156,33 @@ def mainMenu():
                 single_register_read(register,count,Main_Registers)
 
         elif selection == '8':
-                #board.reset()
-                #sys.exit(0)
-                i2c_write()
+                i2c_write_unlock()
 
+        elif selection == '9':
+                board.reset()
+                sys.exit(0)
+             
         else:
                 print("Enter a valid selection number:")
                 mainMenu()
 
 # Working.... I2C
 
-def i2c_write():
+def i2c_write_unlock():
     data = 0
     # (device addr, register addr, lowbyte, highbyte)
-    # slep test 
+    # sleep test 
     # board.i2c_write(0x6c,0x22,0x32,0x6C)
     # Write CM_CMD registe(i2c_addr,CM_CMD_Register, cm_address + Readcmd 4c)
     # maybe this area is write protected see section 6.5
     # write cookie seq 0xf75A, 0x0cc7, 0xd21e) to unlock
-    # 0x22 is the cmd register address
+    # 0x22 is the cmd register address to write cookie
     board.i2c_write(0x6c, 0x22, 0x5A, 0xF7)
     board.i2c_write(0x6c, 0x22, 0xc7, 0x0c)
     board.i2c_write(0x6c, 0x22, 0x1e, 0xd2)
-    # write to configuration area access 
+    # write to configuration area access
+                    #I2C Addr, CMD, byte address to read, 4C read command
+                    # 0x20 CM area CMD register = 0x04 Register address space
     board.i2c_write(0x6c, 0x4e, 0x20, 0x4C)  
     time.sleep(1)   
     # cmd read register location = 0x48
