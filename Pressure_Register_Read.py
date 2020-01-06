@@ -1,6 +1,7 @@
 ' ******Rev History*****'
 'I2C_Write working using sleep command Date 12/18/2019'
 'added simple test to unlock and read nvm area.  12/23/2019'
+'added some comments 1/6/2020'
 
 import time
 import sys
@@ -106,8 +107,8 @@ def mainMenu():
         print("\t 1. Read IC Version and Sensor Configuration")
         print("\t 2. Read Sensor DSP Registers")
         print("\t 3. Read Sensor Main Registers")
-        print("\t 4. Read Corrected Pressure")
-        print("\t 5. Read Corrected Temperature")
+        print("\t 4. Plot Corrected Pressure")
+        print("\t 5. Plot Corrected Temperature")
         print("\t 6. Read Sensor Results Registers")
         print("\t 7. Read Single Register")
         print("\t 8. Unlock and Write Register **Caution*")
