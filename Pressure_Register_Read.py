@@ -1,7 +1,7 @@
 ' ******Rev History*****'
 'I2C_Write working using sleep command Date 12/18/2019'
 'added simple test to unlock and read nvm area.  12/23/2019'
-'added some comments 1/6/2020'
+'added cmd dict access and cmds  1/6/2020'
 
 import time
 import sys
@@ -22,6 +22,10 @@ sensor_hw_version_reg = 0x38
 corrected_pressure = 0x30
 corrected_temp_register = 0x2E
 
+cm_access_reg = {'_status': 0x46, '_rdata' : 0x48, '_wdata': 0x4A, '_cmd': 0x4E}
+
+cm_cmd_reg = {'_read_cmd' : 0x4C, '_crc_check' : 0x88} 
+                
 Config_Mode_List =['Sensor Signal Correction Enabled',\
                 'Temp Compensation of Bridge and Internal Temp Sensor' ,\
                 'Temp Sensor',\
@@ -111,7 +115,7 @@ def mainMenu():
         print("\t 5. Plot Corrected Temperature")
         print("\t 6. Read Sensor Results Registers")
         print("\t 7. Read Single Register")
-        print("\t 8. Unlock and Write Register **Caution*")
+        print("\t 8. Unlock and check CRC of CM User Area **Caution**")
         print("\t 9. Quit/Test Function")
         print("\n")
         selection=(input("Enter Choice:" ))
@@ -157,33 +161,78 @@ def mainMenu():
                 single_register_read(register,count,Main_Registers)
 
         elif selection == '8':
-                i2c_write_unlock()
+                i2c_write_register(cm_access_reg, cm_cmd_reg, 0x20) # Hard coded example for now 
 
         elif selection == '9':
                 board.reset()
                 sys.exit(0)
-             
         else:
                 print("Enter a valid selection number:")
                 mainMenu()
 
-# Working.... I2C
+#CRC working area
+"""
+def crc8(buff):
+    crc = 0
+    for b in buff:
+        print('Buff = ' ,hex(b))
+        crc ^= b
+        print('crc1=', bin(crc))
+        for i in range(8):
+            print('i=' , i)
+            if ((crc & 0x80) != 0):
+                crc = (crc << 1) ^ 0x7
+                print (      '       CRC2 = ', bin(crc))
+            else:
+                crc <<= 1
+                print ('CRC3 =', bin(crc))
+    return crc
 
-def i2c_write_unlock():
-    data = 0
-    # (device addr, register addr, lowbyte, highbyte)
-    # sleep test 
-    # board.i2c_write(0x6c,0x22,0x32,0x6C)
-    # Write CM_CMD registe(i2c_addr,CM_CMD_Register, cm_address + Readcmd 4c)
-    # maybe this area is write protected see section 6.5
-    # write cookie seq 0xf75A, 0x0cc7, 0xd21e) to unlock
-    # 0x22 is the cmd register address to write cookie
+buff = [0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39]
+crcc = crc8(buff)
+print('Sub =', hex(crcc))
+#hex(crcc >> 8)
+print('Final', hex(crcc & 0xFF))
+"""
+# unlock CM area with the cookie sequence 0xf75A, 0x0cc7, 0xd21e
+# 0x22 = register address to write cookie 
+def _unlock():
     board.i2c_write(0x6c, 0x22, 0x5A, 0xF7)
     board.i2c_write(0x6c, 0x22, 0xc7, 0x0c)
     board.i2c_write(0x6c, 0x22, 0x1e, 0xd2)
-    # write to configuration area access
-                    #I2C Addr, CMD, byte address to read, 4C read command
-                    # 0x20 CM area CMD register = 0x04 Register address space
+
+
+# Write to configuration area access
+# I2C Addr, CMD, byte address to read, 4C read command
+# 0x20 CM area CMD register = 0x04 Register address space
+def i2c_write_register(cm_access_reg, cm_cmd_reg, cm_addr):
+    # first unlock CM area
+    _unlock
+    # write CM_CMD register --> command register 0x4C and register to read.
+    # get access reg command
+    #board.i2c_write(0x6c, cm_access_reg['_cmd'] , cm_addr, 0x4C)
+    board.i2c_write(0x6c, cm_access_reg['_cmd'] , cm_cmd_reg['_read_cmd'], cm_addr)
+    # board.i2c_write(0x6c, 0x4e, cm_addr, 0x4C)  
+    time.sleep(1)   
+    # cmd read register location = 0x48
+    board.i2c_read(0x6C, cm_access_reg['_rdata'], 2, board.I2C_READ)
+    # need sleep for some reason on NVM read, maybe timing to memory
+    time.sleep(1)
+    data = board.i2c_get_read_data(0x6C)
+    value0 = data[0]
+    value1 = data[1]
+    value2 = data[2]
+    word = data[2] << 8 | data[1]
+    print("Read Command Area --->" , hex(word))
+
+"""              
+# Write to configuration area access
+# I2C Addr, CMD, byte address to read, 4C read command
+# 0x20 CM area CMD register = 0x04 Register address space
+def i2c_write_register():
+    # first unlock CM area
+    _unlock
+    data = 0
     board.i2c_write(0x6c, 0x4e, 0x20, 0x4C)  
     time.sleep(1)   
     # cmd read register location = 0x48
@@ -196,9 +245,12 @@ def i2c_write_unlock():
     value2 = data[2]
     word = data[2] << 8 | data[1]
     print("Read Command Area --->" , hex(word))
-    
+"""
 
-# Read Sensor hw version via I2C interface
+
+
+
+#Read Sensor hw version via I2C interface
 def read_HW_Version():
     board.i2c_read(sensor_i2c_addr, sensor_hw_version_reg, 2, board.I2C_READ)
     time.sleep(1)
