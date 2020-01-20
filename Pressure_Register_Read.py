@@ -2,6 +2,9 @@
 'I2C_Write working using sleep command Date 12/18/2019'
 'added simple test to unlock and read nvm area.  12/23/2019'
 'added cmd dict access and cmds  1/6/2020'
+'added lambda function and ub menu commands 1/13/2020'
+'fixed i2c_write_register  1/20/2020'
+'added CMD command idel, sleep, reset and start 1/20/2020'
 
 import time
 import sys
@@ -9,33 +12,52 @@ import signal
 import matplotlib.pyplot as plt
 import numpy
 from PyMata.pymata import PyMata
-from threading import Thread
 
 # Digital pin 13 is connected to an LED. If you are running this script with
 # an Arduino UNO no LED is needed (Pin 13 is connected to an internal LED).
 BOARD_LED = 13
 
-# some global sensor registers variables
+# sensor registers variables
 sensor_operation_mode = 0x04
 sensor_i2c_addr = 0x6C
 sensor_hw_version_reg = 0x38
 corrected_pressure = 0x30
 corrected_temp_register = 0x2E
 
-cm_access_reg = {'_status': 0x46, '_rdata' : 0x48, '_wdata': 0x4A, '_cmd': 0x4E}
+# Configuration Memory (CM) Access 
+# Address and command access to CM area
+cm_status_reg = 0x46
+cm_rdata_reg  = 0x48
+cm_wdata_reg = 0x4A
+cm_cmd_reg = 0x4E
 
-cm_cmd_reg = {'_read_cmd' : 0x4C, '_crc_check' : 0x88} 
+# Commands for CM_CMD
+cm_read_cmd = 0x4C
+cm_crc_cmd = 0x88
+
+# lamda byte extraction
+extract_lowb = lambda a: (a & 0xFF)
+extract_highb = lambda a: (a >> 8)
+
+# Command Register (CMD)
+cmd_Addr =  0x22
+
+# CMD Cookies
+cmd_cookie = {1: 0xF75A, 
+              2: 0x0CC7,
+              3: 0xD21E}
+
                 
-Config_Mode_List =['Sensor Signal Correction Enabled',\
-                'Temp Compensation of Bridge and Internal Temp Sensor' ,\
-                'Temp Sensor',\
-                'Post Coarse Correction Eanbled',\
-                'AODO Scale/Offset Enabled',\
-                'AOD0 Limiting Enabled',\
-                'Error Signaling Enabled',\
-                'Ratio Analog Output, DAC Output Temp Correction Coeff Set 0',\
-                'Absolute Temp Signal Correction',\
-                'Sensor Acq. Diags Chain Disabled', \
+Config_Mode_List =['Sensor Signal Correction Enabled',
+                'Temp Compensation of Bridge and Internal Temp Sensor' ,
+                'Temp Sensor',
+                'Post Coarse Correction Eanbled',
+                'AODO Scale/Offset Enabled',
+                'AOD0 Limiting Enabled',
+                'Error Signaling Enabled',
+                'Ratio Analog Output, DAC Output Temp Correction Coeff Set 0',
+                'Absolute Temp Signal Correction',
+                'Sensor Acq. Diags Chain Disabled', 
                 'DSP Post scaling Alarm Disabled']
 
 # Dict of Registers
@@ -92,12 +114,9 @@ Results_Registers = {0:{'Reg': hex(0x26), 'Name' :'Chip temp ADC'},
 
 # Create a PyMata instance
 board = PyMata("COM3", verbose=True)
-
 print ("Board", board)
 
-
 ######################################
-
 
 # Main Menu Function
 def mainMenu():
@@ -114,9 +133,10 @@ def mainMenu():
         print("\t 4. Plot Corrected Pressure")
         print("\t 5. Plot Corrected Temperature")
         print("\t 6. Read Sensor Results Registers")
-        print("\t 7. Read Single Register")
-        print("\t 8. Unlock and check CRC of CM User Area **Caution**")
-        print("\t 9. Quit/Test Function")
+        print("\t 7. Read Single Address Register")
+        print("\t 8. CMD Modes Idle - Start - Reset - Sleep")
+        print("\t 9. Read CM Address Offsets")
+        print("\t 99. Quit/Exit")
         print("\n")
         selection=(input("Enter Choice:" ))
         
@@ -161,18 +181,65 @@ def mainMenu():
                 single_register_read(register,count,Main_Registers)
 
         elif selection == '8':
-                i2c_write_register(cm_access_reg, cm_cmd_reg, 0x20) # Hard coded example for now 
-
+                sub_Menu()
+        #main menu command
+                
         elif selection == '9':
+                cm_addr_offset = (input("Enter to CM location to Read: "))
+                i2c_write_register(cm_addr_offset)
+               
+
+        elif selection == '99':
                 board.reset()
                 sys.exit(0)
         else:
                 print("Enter a valid selection number:")
                 mainMenu()
 
-#CRC working area
-"""
-def crc8(buff):
+
+def sub_Menu():
+    sub_sel = input("CMD modes available"
+                    "\n\t"
+                    "0: Idle"
+                    "\n\t"
+                    "1: Start Measurement"
+                    "\n\t"
+                    "2: Reset"
+                    "\n\t"
+                    "3: Power Sleep State (Untested)"
+                    "\n"
+                    "Enter Command:")
+
+    if sub_sel.isalpha():
+        print("ERROR: You entered a letter, Enter valid number:")
+        sub_Menu()
+
+    elif sub_sel == '0':
+        print("Idle") #Idle
+        cmd_Idle = 0x7BBA
+        _mode(cmd_Idle)
+
+    elif sub_sel == '1':
+        print("Start") # Start
+        cmd_Start = 0x8B93
+        _mode(cmd_Start)
+
+    elif sub_sel == '2': #Reset
+        print("Reset")
+        cmd_Reset = 0xB169
+        _mode(cmd_Reset)
+        
+    elif sub_sel == '3': #Sleep
+        print("Sleep")
+        cmd_Sleep = 0x6C32
+        _mode(cmd_Sleep)
+
+    else:
+        print("Enter a valid selection number:")
+        mainMenu()
+
+#CRC working area 
+"""def crc8(buff):
     crc = 0
     for b in buff:
         print('Buff = ' ,hex(b))
@@ -194,8 +261,27 @@ print('Sub =', hex(crcc))
 #hex(crcc >> 8)
 print('Final', hex(crcc & 0xFF))
 """
+# CMD register writes
+def _mode(cmd):
+        _unlock_1()
+        board.i2c_write(sensor_i2c_addr, cmd_Addr , extract_lowb(cmd), extract_highb(cmd) )
+        print("Command Sent") 
+
+        
+# Unlock to enable system register write access 
+def _unlock_1():
+    for key , cmd in cmd_cookie.items():
+        print('Sending Unlock ''CMD'' Cookies = ' , hex(cmd_cookie[key]))
+        #low_byte = extract_lowb(cmd)
+        #high_byte = extract_highb(cmd)
+        #print(hex(a))
+        #print(hex(b))
+        board.i2c_write(sensor_i2c_addr, cmd_Addr, extract_lowb(cmd), extract_highb(cmd))
+
+
+ 
 # unlock CM area with the cookie sequence 0xf75A, 0x0cc7, 0xd21e
-# 0x22 = register address to write cookie 
+# 0x22 = register address to write cookie
 def _unlock():
     board.i2c_write(0x6c, 0x22, 0x5A, 0xF7)
     board.i2c_write(0x6c, 0x22, 0xc7, 0x0c)
@@ -205,33 +291,33 @@ def _unlock():
 # Write to configuration area access
 # I2C Addr, CMD, byte address to read, 4C read command
 # 0x20 CM area CMD register = 0x04 Register address space
-def i2c_write_register(cm_access_reg, cm_cmd_reg, cm_addr):
+
+
+def i2c_write_register(cm_addr_):
     # first unlock CM area
-    _unlock
+    _unlock_1()
+    register =int(cm_addr_,16)
     # write CM_CMD register --> command register 0x4C and register to read.
-    # get access reg command
-    #board.i2c_write(0x6c, cm_access_reg['_cmd'] , cm_addr, 0x4C)
-    board.i2c_write(0x6c, cm_access_reg['_cmd'] , cm_cmd_reg['_read_cmd'], cm_addr)
-    # board.i2c_write(0x6c, 0x4e, cm_addr, 0x4C)  
+    board.i2c_write(sensor_i2c_addr, cm_cmd_reg, register, cm_read_cmd)  
     time.sleep(1)   
     # cmd read register location = 0x48
-    board.i2c_read(0x6C, cm_access_reg['_rdata'], 2, board.I2C_READ)
+    board.i2c_read(sensor_i2c_addr, cm_rdata_reg, 2, board.I2C_READ)
     # need sleep for some reason on NVM read, maybe timing to memory
     time.sleep(1)
-    data = board.i2c_get_read_data(0x6C)
+    data = board.i2c_get_read_data(sensor_i2c_addr)
     value0 = data[0]
     value1 = data[1]
     value2 = data[2]
     word = data[2] << 8 | data[1]
     print("Read Command Area --->" , hex(word))
 
-"""              
+"""
 # Write to configuration area access
 # I2C Addr, CMD, byte address to read, 4C read command
 # 0x20 CM area CMD register = 0x04 Register address space
 def i2c_write_register():
     # first unlock CM area
-    _unlock
+    _unlock()
     data = 0
     board.i2c_write(0x6c, 0x4e, 0x20, 0x4C)  
     time.sleep(1)   
@@ -245,11 +331,8 @@ def i2c_write_register():
     value2 = data[2]
     word = data[2] << 8 | data[1]
     print("Read Command Area --->" , hex(word))
+
 """
-
-
-
-
 #Read Sensor hw version via I2C interface
 def read_HW_Version():
     board.i2c_read(sensor_i2c_addr, sensor_hw_version_reg, 2, board.I2C_READ)
@@ -426,6 +509,8 @@ board.i2c_config(0, board.ANALOG, 4, 5)
 # call main menu
 
 mainMenu()
+
+
 
 # Close PyMata when we are done
 board.close()
