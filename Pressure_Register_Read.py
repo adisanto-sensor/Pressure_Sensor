@@ -135,7 +135,8 @@ def mainMenu():
         print("\t 6. Read Sensor Results Registers")
         print("\t 7. Read Single Address Register")
         print("\t 8. CMD Modes Idle - Start - Reset - Sleep")
-        print("\t 9. Read CM Address Offsets")
+        print("\t 9. Read CM Address Offsets ex: CM-->0x00 = 0x50 ")
+        print("\t 10. Read CM factory calibration area 0x00 to 0x1E and display checksum")
         print("\t 99. Quit/Exit")
         print("\n")
         selection=(input("Enter Choice:" ))
@@ -187,7 +188,10 @@ def mainMenu():
         elif selection == '9':
                 cm_addr_offset = (input("Enter to CM location to Read: "))
                 i2c_write_register(cm_addr_offset)
-               
+
+        elif selection == '10':
+                'Do unlock of CM memory'
+                read_calibration()
 
         elif selection == '99':
                 board.reset()
@@ -239,10 +243,11 @@ def sub_Menu():
         mainMenu()
 
 #CRC working area 
-"""def crc8(buff):
+def crc8(buff):
     crc = 0
     for b in buff:
         print('Buff = ' ,hex(b))
+        # bitwise xor
         crc ^= b
         print('crc1=', bin(crc))
         for i in range(8):
@@ -256,18 +261,18 @@ def sub_Menu():
     return crc
 
 buff = [0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39]
-crcc = crc8(buff)
-print('Sub =', hex(crcc))
+#crcc = crc8(buff)
+#print('Sub =', hex(crcc))
 #hex(crcc >> 8)
-print('Final', hex(crcc & 0xFF))
-"""
-# CMD register writes
+#print('Final', hex(crcc & 0xFF))
+
+
+# CMD modes writes
 def _mode(cmd):
         _unlock_1()
         board.i2c_write(sensor_i2c_addr, cmd_Addr , extract_lowb(cmd), extract_highb(cmd) )
         print("Command Sent") 
 
-        
 # Unlock to enable system register write access 
 def _unlock_1():
     for key , cmd in cmd_cookie.items():
@@ -278,7 +283,6 @@ def _unlock_1():
         #print(hex(b))
         board.i2c_write(sensor_i2c_addr, cmd_Addr, extract_lowb(cmd), extract_highb(cmd))
 
-
  
 # unlock CM area with the cookie sequence 0xf75A, 0x0cc7, 0xd21e
 # 0x22 = register address to write cookie
@@ -287,12 +291,34 @@ def _unlock():
     board.i2c_write(0x6c, 0x22, 0xc7, 0x0c)
     board.i2c_write(0x6c, 0x22, 0x1e, 0xd2)
 
-
+# Read the CM registers related to calibration 0x0 to 0x1E
+def read_calibration():
+    cm_addr_lower = 0
+    cm_addr_upper = 29
+    cal_array = [None] * 30
+    #do unlock
+    _unlock_1()
+    # write CM_CMD register --> command register 0x4C and register to read.
+    for x in range (cm_addr_lower, cm_addr_upper , 2):
+        print ('x = ', hex(x))
+        board.i2c_write(sensor_i2c_addr, cm_cmd_reg, x , cm_read_cmd)
+        time.sleep(1)
+        # cmd read register location = 0x48
+        board.i2c_read(sensor_i2c_addr, cm_rdata_reg, 2, board.I2C_READ)
+        time.sleep(1)
+        data = board.i2c_get_read_data(sensor_i2c_addr)
+        # need sleep for some reason on NVM read, maybe timing to memory
+        word = data[2] << 8 | data[1]
+        print("Read Cal Area --->" , hex(word))
+        cal_array[x] = data[1]
+        # x + 1 fills the odd locations into the cal array like 1, 3,5,7 
+        cal_array[x+1] = data[2]
+        print("Calibration Array" , cal_array)
+                
+        
 # Write to configuration area access
 # I2C Addr, CMD, byte address to read, 4C read command
 # 0x20 CM area CMD register = 0x04 Register address space
-
-
 def i2c_write_register(cm_addr_):
     # first unlock CM area
     _unlock_1()
@@ -331,8 +357,8 @@ def i2c_write_register():
     value2 = data[2]
     word = data[2] << 8 | data[1]
     print("Read Command Area --->" , hex(word))
-
 """
+
 #Read Sensor hw version via I2C interface
 def read_HW_Version():
     board.i2c_read(sensor_i2c_addr, sensor_hw_version_reg, 2, board.I2C_READ)
