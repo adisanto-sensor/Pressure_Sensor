@@ -6,12 +6,14 @@
 'fixed i2c_write_register  1/20/2020'
 'added CMD command idel, sleep, reset and start 1/20/2020'
 
+
 import time
 import sys
 import signal
 import matplotlib.pyplot as plt
 import numpy
 from PyMata.pymata import PyMata
+from crccheck.crc import Crc8
 
 # Digital pin 13 is connected to an LED. If you are running this script with
 # an Arduino UNO no LED is needed (Pin 13 is connected to an internal LED).
@@ -47,7 +49,10 @@ cmd_cookie = {1: 0xF75A,
               2: 0x0CC7,
               3: 0xD21E}
 
-                
+# cmd cookie flag to see if cookies were send once to enable CM reads
+
+cmd_cookie_flag = False 
+
 Config_Mode_List =['Sensor Signal Correction Enabled',
                 'Temp Compensation of Bridge and Internal Temp Sensor' ,
                 'Temp Sensor',
@@ -118,6 +123,10 @@ print ("Board", board)
 
 ######################################
 
+#data = (0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39)
+#crc = Crc8.calc(data)
+#print ("Test new CRC", hex(crc))
+
 # Main Menu Function
 def mainMenu():
     while True:
@@ -187,7 +196,7 @@ def mainMenu():
                 
         elif selection == '9':
                 cm_addr_offset = (input("Enter to CM location to Read: "))
-                i2c_write_register(cm_addr_offset)
+                i2c_cm_register_access(cm_addr_offset)
 
         elif selection == '10':
                 'Do unlock of CM memory'
@@ -245,22 +254,24 @@ def sub_Menu():
 #CRC working area 
 def crc8(buff):
     crc = 0
+    print ('Buffer', buff)
     for b in buff:
-        print('Buff = ' ,hex(b))
+        # print('Buff = ' , b)
         # bitwise xor
         crc ^= b
-        print('crc1=', bin(crc))
+       # print('crc1=', bin(crc))
         for i in range(8):
-            print('i=' , i)
+            # print('i=' , i)
             if ((crc & 0x80) != 0):
                 crc = (crc << 1) ^ 0x7
-                print (      '       CRC2 = ', bin(crc))
+                #print (      '       CRC2 = ', bin(crc))
             else:
                 crc <<= 1
-                print ('CRC3 =', bin(crc))
+    print ('Final CRC8  =', bin(crc))
+    print ('Final CRC8 = ', hex(crc & 0xFF))
     return crc
 
-buff = [0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39]
+#buff = [0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39]
 #crcc = crc8(buff)
 #print('Sub =', hex(crcc))
 #hex(crcc >> 8)
@@ -282,6 +293,8 @@ def _unlock_1():
         #print(hex(a))
         #print(hex(b))
         board.i2c_write(sensor_i2c_addr, cmd_Addr, extract_lowb(cmd), extract_highb(cmd))
+    global cmd_cookie_flag 
+    cmd_cookie_flag = True 
 
  
 # unlock CM area with the cookie sequence 0xf75A, 0x0cc7, 0xd21e
@@ -293,14 +306,18 @@ def _unlock():
 
 # Read the CM registers related to calibration 0x0 to 0x1E
 def read_calibration():
-    cm_addr_lower = 0
-    cm_addr_upper = 29
-    cal_array = [None] * 30
+    # Do CRC check for a test 
+    board.i2c_write(sensor_i2c_addr, cm_cmd_reg, 0x0, 0x88)
+    print ('Read CM area from locations 0x00 to 0x1E CRC8 Check')
+    cm_addr_lower = 0  # CM 0x00 
+    cm_addr_upper = 31 # CM 0x1F 
+    cal_array = [None] * 32 
     #do unlock
-    _unlock_1()
+    if cmd_cookie_flag == False:  # Just want to unlock cm area once so test this flag to ensure it got unlock once. 
+        _unlock_1()
     # write CM_CMD register --> command register 0x4C and register to read.
     for x in range (cm_addr_lower, cm_addr_upper , 2):
-        print ('x = ', hex(x))
+        print ('CM Address = ', hex(x))
         board.i2c_write(sensor_i2c_addr, cm_cmd_reg, x , cm_read_cmd)
         time.sleep(1)
         # cmd read register location = 0x48
@@ -313,13 +330,18 @@ def read_calibration():
         cal_array[x] = data[1]
         # x + 1 fills the odd locations into the cal array like 1, 3,5,7 
         cal_array[x+1] = data[2]
-        print("Calibration Array" , cal_array)
+
+    #crc_results = crc8(cal_array)
+
+    crc_results = Crc8.calc(cal_array)
+    print ("Using new CRC package", hex(crc_results))
                 
         
-# Write to configuration area access
+# Setup access to configuration memory area
+# Need to perform special payttern of an I2C write and I2C read for CM access
 # I2C Addr, CMD, byte address to read, 4C read command
 # 0x20 CM area CMD register = 0x04 Register address space
-def i2c_write_register(cm_addr_):
+def i2c_cm_register_access(cm_addr_):
     # first unlock CM area
     _unlock_1()
     register =int(cm_addr_,16)
