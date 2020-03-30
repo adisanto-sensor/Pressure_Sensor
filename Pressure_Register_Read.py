@@ -1,4 +1,4 @@
-' ******Rev History*****'
+10
 'I2C_Write working using sleep command Date 12/18/2019'
 'added simple test to unlock and read nvm area.  12/23/2019'
 'added cmd dict access and cmds  1/6/2020'
@@ -13,7 +13,7 @@ import signal
 import matplotlib.pyplot as plt
 import numpy
 from PyMata.pymata import PyMata
-from crccheck.crc import Crc8
+from crccheck.crc import *
 
 # Digital pin 13 is connected to an LED. If you are running this script with
 # an Arduino UNO no LED is needed (Pin 13 is connected to an internal LED).
@@ -145,7 +145,8 @@ def mainMenu():
         print("\t 7. Read Single Address Register")
         print("\t 8. CMD Modes Idle - Start - Reset - Sleep")
         print("\t 9. Read CM Address Offsets ex: CM-->0x00 = 0x50 ")
-        print("\t 10. Read CM factory calibration area 0x00 to 0x1E and display checksum")
+        print("\t 10. DUMP CM Cal and CM User Registers, Perform CRC")
+        print("\t 11. NOT DEFINED")
         print("\t 99. Quit/Exit")
         print("\n")
         selection=(input("Enter Choice:" ))
@@ -196,11 +197,11 @@ def mainMenu():
                 
         elif selection == '9':
                 cm_addr_offset = (input("Enter to CM location to Read: "))
-                i2c_cm_register_access(cm_addr_offset)
+                configuration_memory_rd(cm_addr_offset)
 
         elif selection == '10':
-                'Do unlock of CM memory'
-                read_calibration()
+                cm_cal_read, cm_user_read = map(str, input("Enter 'Y' to Read CM Cal area, 'Y' CM User Area: ").split())
+                cm_read(cm_cal_read, cm_user_read)
 
         elif selection == '99':
                 board.reset()
@@ -304,14 +305,18 @@ def _unlock():
     board.i2c_write(0x6c, 0x22, 0xc7, 0x0c)
     board.i2c_write(0x6c, 0x22, 0x1e, 0xd2)
 
-# Read the CM registers related to calibration 0x0 to 0x1E
-def read_calibration():
-    # Do CRC check for a test 
-    board.i2c_write(sensor_i2c_addr, cm_cmd_reg, 0x0, 0x88)
-    print ('Read CM area from locations 0x00 to 0x1E CRC8 Check')
+# Read the CM registers and do read/checksum
+def cm_read(cm_cal_read, cm_user_read):
+    # print ('Read CM area from locations....')
     cm_addr_lower = 0  # CM 0x00 
-    cm_addr_upper = 31 # CM 0x1F 
-    cal_array = [None] * 32 
+    if (cm_cal_read == 'Y' and cm_user_read == 'N'):
+        cm_addr_upper = 31 # Top of Cal area 0x1F
+        cal_array = [None] * 32  
+        print("Reading CM Cal Area --->")
+    elif (cm_cal_read == 'Y' and cm_user_read == 'Y'):
+        cm_addr_upper = 128 #Top of CM 0x7E
+        cal_array = [None] * 128
+        print("Reading CM User Area --->")
     #do unlock
     if cmd_cookie_flag == False:  # Just want to unlock cm area once so test this flag to ensure it got unlock once. 
         _unlock_1()
@@ -326,24 +331,34 @@ def read_calibration():
         data = board.i2c_get_read_data(sensor_i2c_addr)
         # need sleep for some reason on NVM read, maybe timing to memory
         word = data[2] << 8 | data[1]
-        print("Read Cal Area --->" , hex(word))
+        print("Data  --->" , hex(word))
         cal_array[x] = data[1]
         # x + 1 fills the odd locations into the cal array like 1, 3,5,7 
         cal_array[x+1] = data[2]
 
+    # My CRC implemenation
     #crc_results = crc8(cal_array)
-
-    crc_results = Crc8.calc(cal_array)
-    print ("Using new CRC package", hex(crc_results))
-                
+        
+    #We can if required created new defined crc instance using class below
+    #xyx = Crc( width=8, poly=0x7, reflect_input = False, reflect_output = False, xor_output = 0x00, check_result = None)
+    #xxx = xyx.process(cal_array)
+    #crc_results = xxx.final()
+    
+    #Use base class from Crccheck package
+    if (cm_cal_read == 'Y' and cm_user_read == 'N'):
+        crc_results = Crc8.calc(cal_array)
+        print ("Using CrcBase8 = ", hex(crc_results))
+    if (cm_cal_read == 'Y' and cm_user_read == 'Y'):
+        crc_results = Crc16.calc(cal_array)
+        print ("Using CrcBase16 = ", hex(crc_results))   
         
 # Setup access to configuration memory area
 # Need to perform special payttern of an I2C write and I2C read for CM access
 # I2C Addr, CMD, byte address to read, 4C read command
 # 0x20 CM area CMD register = 0x04 Register address space
-def i2c_cm_register_access(cm_addr_):
-    # first unlock CM area
-    _unlock_1()
+def configuration_memory_rd(cm_addr_):
+    if cmd_cookie_flag == False:  # Just want to unlock cm area once so test this flag to ensure it got unlock once. 
+        _unlock_1()
     register =int(cm_addr_,16)
     # write CM_CMD register --> command register 0x4C and register to read.
     board.i2c_write(sensor_i2c_addr, cm_cmd_reg, register, cm_read_cmd)  
@@ -357,7 +372,7 @@ def i2c_cm_register_access(cm_addr_):
     value1 = data[1]
     value2 = data[2]
     word = data[2] << 8 | data[1]
-    print("Read Command Area --->" , hex(word))
+    print("Read Configuration Memory = " , hex(word))
 
 """
 # Write to configuration area access
