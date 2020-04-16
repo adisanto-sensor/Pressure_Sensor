@@ -6,3 +6,4 @@ Just some reads to sensor to get at internal registers and operating modes.
 03/17/2020  Added a bunch new functions to read SMI pressure sensor.
 03/31/2020 Added CRC to user and cal area.
 04/17/2020 Added pressure and temp graphs.
+
