@@ -65,6 +65,13 @@ Config_Mode_List =['Sensor Signal Correction Enabled',
                 'Sensor Acq. Diags Chain Disabled', 
                 'DSP Post scaling Alarm Disabled']
 
+# Further Enchancment Not used
+message_dict = {
+                0:"Reading CM Cal Area --->",
+                1:"Reading User Area --->",
+                2:"CM Address = "
+                }
+                
 # Dict of Registers
 Main_Registers = {0:{'Reg':hex(0x50),'Name':'SER0'},
         1:{'Reg':hex(0x52),'Name':'SER1'},
@@ -127,6 +134,13 @@ print ("Board", board)
 #crc = Crc8.calc(data)
 #print ("Test new CRC", hex(crc))
 
+# Needs to be implemened
+def myPrint(message_number, print_flag , print_var ):
+        if print_flag:
+            print(message_dict.get(message_number))
+            print(print_var)
+            
+
 # Main Menu Function
 def mainMenu():
     while True:
@@ -145,8 +159,8 @@ def mainMenu():
         print("\t 7. Read Single Address Register")
         print("\t 8. CMD Modes Idle - Start - Reset - Sleep")
         print("\t 9. Read CM Address Offsets ex: CM-->0x00 = 0x50 ")
-        print("\t 10. DUMP CM Cal and CM User Registers, Perform CRC")
-        print("\t 11. NOT DEFINED")
+        print("\t 10. Dump CM Cal and CM User Registers, Perform CRC")
+        print("\t 11. Generate Checksum on CM ")
         print("\t 99. Quit/Exit")
         print("\n")
         selection=(input("Enter Choice:" ))
@@ -200,8 +214,16 @@ def mainMenu():
                 configuration_memory_rd(cm_addr_offset)
 
         elif selection == '10':
-                cm_cal_read, cm_user_read = map(str, input("Enter 'Y' to Read CM Cal area, 'Y' CM User Area: ").split())
-                cm_read(cm_cal_read, cm_user_read)
+                try: 
+                        cm_cal_read_flag, cm_user_read_flag = map(str, input("Enter 'Y' to Read CM Cal area, 'Y' CM User Area: ").split())
+                except ValueError:
+                        print("Two inputs are required")
+                        continue
+                # ugly
+                if  cm_cal_read_flag.islower() or cm_user_read_flag.islower() or  cm_cal_read_flag.isupper() or cm_user_read_flag.isupper() :
+                    cm_read(cm_cal_read_flag.upper(), cm_user_read_flag.upper())
+                else:
+                    continue
 
         elif selection == '99':
                 board.reset()
@@ -306,17 +328,22 @@ def _unlock():
     board.i2c_write(0x6c, 0x22, 0x1e, 0xd2)
 
 # Read the CM registers and do read/checksum
-def cm_read(cm_cal_read, cm_user_read):
+def cm_read(cm_cal_read_flag, cm_user_read_flag):
     # print ('Read CM area from locations....')
     cm_addr_lower = 0  # CM 0x00 
-    if (cm_cal_read == 'Y' and cm_user_read == 'N'):
+    if (cm_cal_read_flag == 'Y' and cm_user_read_flag == 'N'):
         cm_addr_upper = 31 # Top of Cal area 0x1F
-        cal_array = [None] * 32  
-        print("Reading CM Cal Area --->")
-    elif (cm_cal_read == 'Y' and cm_user_read == 'Y'):
+        cal_array = [None] * 32
+        print("Reading CM Calibration Area --->")
+    elif (cm_cal_read_flag == 'Y' and cm_user_read_flag == 'Y') or (cm_cal_read_flag == 'N' and cm_user_read_flag == 'Y'):
         cm_addr_upper = 128 #Top of CM 0x7E
         cal_array = [None] * 128
         print("Reading CM User Area --->")
+
+    elif (cm_cal_read_flag == 'N' and cm_user_read_flag == 'N') or(cm_cal_read_flag == 'N' and cm_user_read_flag == 'N'):
+        print("Not valid")
+        return
+        
     #do unlock
     if cmd_cookie_flag == False:  # Just want to unlock cm area once so test this flag to ensure it got unlock once. 
         _unlock_1()
@@ -345,10 +372,10 @@ def cm_read(cm_cal_read, cm_user_read):
     #crc_results = xxx.final()
     
     #Use base class from Crccheck package
-    if (cm_cal_read == 'Y' and cm_user_read == 'N'):
+    if (cm_cal_read_flag == 'Y' and cm_user_read_flag == 'N'):
         crc_results = Crc8.calc(cal_array)
         print ("Using CrcBase8 = ", hex(crc_results))
-    if (cm_cal_read == 'Y' and cm_user_read == 'Y'):
+    if (cm_cal_read_flag == 'Y' and cm_user_read_flag == 'Y'):
         crc_results = Crc16.calc(cal_array)
         print ("Using CrcBase16 = ", hex(crc_results))   
         
